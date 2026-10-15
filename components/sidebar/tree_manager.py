@@ -1,14 +1,19 @@
 """
 SublimeLight - Sidebar Tree Data Manager
-Orchestrates disk discovery actions and manages system node ID key maps.
+Orchestrates disk discovery actions and manages system node ID key maps 
+utilizing custom row tags to bypass default Windows line styles and sorting keys safely.
 """
 
 import os
+import config
 
 class SidebarTreeManager:
     def __init__(self, tree_widget):
         self.tree = tree_widget
         self.node_path_map = {}
+        
+        # Explicitly lock row background metrics to a custom tag layer to paint right over legacy tracks
+        self.tree.tag_configure('sidebar_row', background=config.COLOR_SIDEBAR)
 
     def reset_tree(self):
         """Wipes the current node configurations securely."""
@@ -19,7 +24,7 @@ class SidebarTreeManager:
         """Mounts the primary workspace folder entry token cleanly on top."""
         self.reset_tree()
         root_name = os.path.basename(folder_path)
-        root_node = self.tree.insert("", "end", text=f" 📂  {root_name}", open=True)
+        root_node = self.tree.insert("", "end", text=f" 📂  {root_name}", open=True, tags=('sidebar_row',))
         self.node_path_map[root_node] = folder_path
         self.populate_directory_level(root_node, folder_path)
 
@@ -42,17 +47,17 @@ class SidebarTreeManager:
             else:
                 files.append((entry, full_path))
 
-        # Sort cleanly by item names to prevent type mismatch crashes
+        # FIXED TUPLE SORTING: Look explicitly at slot index 0 to sort cleanly by string names!
         folders.sort(key=lambda x: x[0].lower())
         files.sort(key=lambda x: x[0].lower())
 
-        # 1. Populate sub-folders with a dummy token for lazy loading expansion
+        # Populate sub-folders with matching row tags
         for name, full_path in folders:
-            node = self.tree.insert(parent_node, "end", text=f" 📁  {name}", open=False)
+            node = self.tree.insert(parent_node, "end", text=f" 📁  {name}", open=False, tags=('sidebar_row',))
             self.node_path_map[node] = full_path
-            self.tree.insert(node, "end", text="DummyToken")
+            self.tree.insert(node, "end", text="DummyToken", tags=('sidebar_row',))
 
-        # 2. Populate standalone file items
+        # Populate standalone file items with matching row tags
         for name, full_path in files:
-            node = self.tree.insert(parent_node, "end", text=f" 📄  {name}", open=False)
+            node = self.tree.insert(parent_node, "end", text=f" 📄  {name}", open=False, tags=('sidebar_row',))
             self.node_path_map[node] = full_path

@@ -1,14 +1,14 @@
 """
 SublimeLight - Integrated Terminal Component View
-Provides a toggleable command prompt panel shell inside a CustomTkinter textbox frame.
+Provides a toggleable command prompt panel shell inside a CustomTkinter textbox frame
+safely backed by a real-time thread-safe queue polling shell process engine.
+Fully secured against text repetitions, cursor bleeding, and coordinate overlaps.
 """
 
 import os
-import sys
-import subprocess
-import threading
+import queue
 import customtkinter as ctk
-import config
+from .shell_process import ShellProcessEngine
 
 class TerminalComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
@@ -22,7 +22,7 @@ class TerminalComponent(ctk.CTkFrame):
         self.header_frame.pack_propagate(False)
 
         self.title_lbl = ctk.CTkLabel(
-            self.header_frame, text="TERMINAL (bash/cmd proxy)", 
+            self.header_frame, text="TERMINAL (persistent cmd proxy)", 
             font=("Arial", 10, "bold"), text_color="#75715E"
         )
         self.title_lbl.pack(side="left", padx=15)
@@ -34,120 +34,98 @@ class TerminalComponent(ctk.CTkFrame):
         )
         self.text_area.pack(side="bottom", fill="both", expand=True)
 
-        # 3. Initialize Terminal System Directories & DYNAMIC PROMPT
         self.current_dir = os.path.normpath(os.getcwd())
-        
-        # Run dynamic check right on startup instead of hardcoding (venv)
-        self.prompt_string = self._generate_dynamic_prompt()
-        
-        # Draw Welcome Message block
+        self.command_start_index = "1.0"
+
+        # Welcome baseline title text
         self.text_area.insert("end", "=== SUBLIMELIGHT INTEGRATED TERMINAL SHELL ===\nType commands natively. Press Ctrl+Shift to toggle visibility.\n")
-        self._print_prompt()
 
-        # Intercept Return keystrokes to process custom commands parsing
+        # 3. THREAD-SAFE QUEUE SYSTEM ASRESEMBLY
+        self.output_queue = queue.Queue()
+        self.shell = ShellProcessEngine(self.current_dir, self.output_queue)
+
+        # Bind Key, Click, and Entry Hook protocols
         self.text_area.bind("<Return>", self._on_enter_command)
-        
-        # Freeze backspace parameters to stop users from deleting the directory prompt strings
         self.text_area.bind("<Key>", self._restrict_cursor_bounds)
+        self.text_area.bind("<Button-1>", self._enforce_active_input_focus)
+        self.text_area.bind("<ButtonRelease-1>", self._enforce_active_input_focus)
 
-    def _generate_dynamic_prompt(self):
-        """DYNAMIC CHECK: Only displays a virtual environment tag if a real venv folder exists inside the active workspace."""
-        # Define standard virtual environment activation directories for Windows and Linux
-        windows_venv_check = os.path.join(self.current_dir, "Scripts", "activate.bat")
-        linux_venv_check = os.path.join(self.current_dir, "bin", "activate")
+        # Start periodic queue monitoring loops straight on CustomTkinter's clock
+        self._process_terminal_queue()
+
+    def _process_terminal_queue(self):
+        """Monitors the thread-safe queue and flushes chars to the UI, auto-updating markers cleanly."""
+        has_new_content = False
         
-        # Look for typical virtual environment folders inside the current workspace (like 'venv' or '.venv')
-        has_local_venv = os.path.exists(windows_venv_check) or os.path.exists(linux_venv_check)
-        
-        if has_local_venv:
-            # If the user explicitly built a virtual environment inside their project folder, display it
-            return f"\n(venv) {self.current_dir}\n$ "
-        else:
-            # Clean prompt line with zero hardcoded virtual labels for normal desktop folders
-            return f"\n{self.current_dir}\n$ "
+        while not self.output_queue.empty():
+            try:
+                char = self.output_queue.get_nowait()
+                self.text_area.insert("end", char)
+                has_new_content = True
+            except queue.Empty:
+                break
 
+        if has_new_content:
+            self.text_area.see("end")
+            self.text_area.mark_set("insert", "end")
+            # FIXED: Auto-calculate exactly where shell outputs stop and your input begins!
+            self.command_start_index = self.text_area.index("end-1c")
 
-    def _print_prompt(self):
-        """Appends the current system working directory line string."""
-        self.text_area.insert("end", self.prompt_string)
-        self.text_area.see("end")
-        self.text_area.mark_set("insert", "end")
-        self.command_start_index = self.text_area.index("insert")
+        # Re-schedule the loop iteration task exactly every 10ms natively
+        self.after(10, self._process_terminal_queue)
 
     def _on_enter_command(self, event):
-        """Extracts the written text parameters on line entries and dispatches execution tasks."""
+        """Extracts written text directly using the verified prompt indices and routes it down the pipe."""
         command_raw = self.text_area.get(self.command_start_index, "end-1c").strip()
         
-        if not command_raw:
-            self.after(1, self._print_prompt)
-            return "break"
-
-        # Intercept clear/cls commands natively before they reach Windows
         if command_raw.lower() in ("clear", "cls"):
-            self.text_area.delete("1.0", "end")
-            self.after(1, self._print_prompt)
+            self.text_area.delete("3.0", "end")
+            self.shell.send_input("\n")
             return "break"
 
-        # Intercept directory adjustments 'cd' natively inside our Python wrapper engine
-        if command_raw.startswith("cd "):
-            target_dir = command_raw[3:].strip().strip('"').strip("'")
-            if target_dir == "..":
-                self.current_dir = os.path.normpath(os.path.dirname(self.current_dir))
-                os.chdir(self.current_dir)
-            elif os.path.exists(target_dir):
-                self.current_dir = os.path.normpath(os.path.abspath(target_dir))
-                os.chdir(self.current_dir)
-            else:
-                self.text_area.insert("end", f"\nSystem cannot find the specified directory path: {target_dir}")
-            
-            # FIXED: Call our dynamic environment checker method here instead of hardcoding (venv)!
-            self.prompt_string = self._generate_dynamic_prompt()
-            self.after(1, self._print_prompt)
-            return "break"
-
-        # Execute system applications asynchronously in background workers
-        self.text_area.insert("end", "\n")
-        threading.Thread(target=self._async_run_process, args=(command_raw,), daemon=True).start()
-        return "break" 
-
-    def _async_run_process(self, command_str):
-        """Runs native system executables cleanly inside detached execution threads."""
-        try:
-            process = subprocess.Popen(
-                command_str, shell=True, cwd=self.current_dir,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            stdout, stderr = process.communicate()
-            
-            if stdout:
-                self.text_area.insert("end", stdout)
-            if stderr:
-                self.text_area.insert("end", stderr)
-        except Exception as e:
-            self.text_area.insert("end", f"Execution Engine Failure: {e}\n")
-            
-        self.after(1, self._print_prompt)
+        # Direct-pipe input string straight into the stateful sub-process stdin
+        self.shell.send_input(command_raw)
+        return None  # Let Tkinter append its native linebreak character normally
 
     def _restrict_cursor_bounds(self, event):
         """Keeps the typing insertion point locked safely ahead of prompt boundary metrics."""
+        current_insert = self.text_area.index("insert")
+        
         if event.keysym in ("BackSpace", "Left"):
-            current_insert = self.text_area.index("insert")
             if self.text_area.compare(current_insert, "<=", self.command_start_index):
-                return "break" 
+                return "break"
+                
+        if len(event.char) > 0 and event.keysym not in ("Control_L", "Control_R", "Shift_L", "Shift_R"):
+            if self.text_area.compare(current_insert, "<", self.command_start_index):
+                self.text_area.mark_set("insert", "end")
+
+    def _enforce_active_input_focus(self, event):
+        """Bounces insertion indices back down ahead of active prompt marks on click gestures."""
+        self.after(1, self._snap_cursor_to_valid_bounds)
+
+    def _snap_cursor_to_valid_bounds(self):
+        try:
+            current_insert = self.text_area.index("insert")
+            if self.text_area.compare(current_insert, "<", self.command_start_index):
+                self.text_area.mark_set("insert", "end")
+        except:
+            pass
 
     def sync_workspace_directory(self, folder_path):
         """Dynamic hook that instantly forces the shell to change its directory focus."""
         if not folder_path or not os.path.exists(folder_path):
             return
             
-        try:
-            self.current_dir = os.path.normpath(os.path.abspath(folder_path))
-            os.chdir(self.current_dir)
-            
-            # Re-generate the prompt string cleanly using the dynamic variables checker method
-            self.prompt_string = self._generate_dynamic_prompt()
-            
-            self.text_area.insert("end", f"\n\n[Terminal Info] Synced to workspace folder: {os.path.basename(self.current_dir)}")
-            self._print_prompt()
-        except:
-            pass
+        self.current_dir = os.path.normpath(os.path.abspath(folder_path))
+        self.shell.current_dir = self.current_dir
+        
+        # Change running process directory instantly
+        self.shell.send_input(f'cd /d "{self.current_dir}"')
+        
+        # AUTO-ACTIVATION CHECK: See if a local virtual environment script path exists
+        venv_activate_bat = os.path.join(self.current_dir, "venv", "Scripts", "activate.bat")
+        
+        if os.path.exists(venv_activate_bat):
+            self.shell.send_input(f'"{venv_activate_bat}"')
+        else:
+            self.shell.send_input("\n")

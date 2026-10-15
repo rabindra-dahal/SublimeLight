@@ -1,6 +1,7 @@
 """
-SublimeLight - Sidebar Component View
-Central master view frame orchestrating decoupled theme, data, and event components.
+SublimeLight - Sidebar Component View (Premium Monokai ttk.Treeview)
+Handles nested folder explorer hierarchies utilizing a heavily restyled
+native Treeview to deliver a sleek, modern, VS Code-inspired dark aesthetic.
 """
 
 import os
@@ -13,6 +14,7 @@ from .theme_style import SidebarThemeStyle
 from .tree_manager import SidebarTreeManager
 from .tree_events import SidebarTreeEvents
 
+# FIXED CLASS NAME: Must exactly match 'SidebarComponent' to satisfy the main.py import pass!
 class SidebarComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
         super().__init__(parent, width=200, fg_color=config.COLOR_SIDEBAR, corner_radius=0)
