@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces equipped with valid sorting metrics and all-element mouse wheel handlers.
+and project workspaces fully integrated with fluid inner-canvas scroll views.
 """
 
 import os
@@ -46,8 +46,24 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.files_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
+        # Map mouse wheel listening tracks globally onto the canvas interior
+        if hasattr(self.files_scroll_frame, "_canvas"):
+            self.files_scroll_frame._canvas.bind_all("<MouseWheel>", self._global_mouse_wheel_proxy)
+
+    def _global_mouse_wheel_proxy(self, event):
+        """Proxy function that grabs any mouse wheel scrolls and moves this specific panel view."""
+        if self.current_workspace_folder and hasattr(self.files_scroll_frame, "_canvas"):
+            x, y = self.winfo_pointerxy()
+            widget_under_mouse = self.winfo_containing(x, y)
+            
+            if widget_under_mouse and (str(widget_under_mouse).startswith(str(self))):
+                try:
+                    self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                except:
+                    pass
+
     def _trigger_new_file(self):
-        """Clears file state contexts to initialize a blank unpersisted document track inside a tab."""
+        """Clears file state contexts to initialize a blank document track inside a tab."""
         self.standalone_file_btn.pack_forget()
         self.standalone_file_path = None
         self.context.open_new_tab("untitled", "")
@@ -92,11 +108,7 @@ class SidebarComponent(ctk.CTkFrame):
         if not self.current_workspace_folder:
             return
         self._clear_tree_widgets()
-        
-        # 1. Execute the recursive rendering pass to repack all expanded/collapsed elements
         self._render_directory_level(self.current_workspace_folder, indent_level=0)
-        
-        # 2. Force the container layout engine to immediately compute updated height boundaries
         self.files_scroll_frame.update_idletasks()
 
     def _render_directory_level(self, target_dir, indent_level):
@@ -118,8 +130,9 @@ class SidebarComponent(ctk.CTkFrame):
             else:
                 files.append((item, full_path))
 
-        folders.sort(key=lambda x: x.lower())
-        files.sort(key=lambda x: x.lower())
+        # FIXED SORT KEYS: Grab x[0] to sort cleanly by the name string instead of the whole tuple list array!
+        folders.sort(key=lambda x: x[0].lower())
+        files.sort(key=lambda x: x[0].lower())
 
         # 1. DRAW SUB-FOLDERS
         for name, full_path in folders:
@@ -139,10 +152,6 @@ class SidebarComponent(ctk.CTkFrame):
                 command=lambda p=full_path: self._toggle_folder_state(p)
             )
             folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
-            
-            # FIXED ABSOLUTE SCROLL HOOK: Recursively bind wheel event to the widget and all its inner components
-            self._bind_mouse_wheel_recursive(folder_btn)
-            
             self.active_tree_widgets.append(folder_btn)
 
             if is_expanded:
@@ -164,23 +173,7 @@ class SidebarComponent(ctk.CTkFrame):
                 command=lambda p=full_path: self._load_file_from_sidebar(p)
             )
             file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
-            
-            # FIXED ABSOLUTE SCROLL HOOK: Recursively bind wheel event to the widget and all its inner components
-            self._bind_mouse_wheel_recursive(file_btn)
-            
             self.active_tree_widgets.append(file_btn)
-
-    def _bind_mouse_wheel_recursive(self, widget):
-        """Recursively binds the scroll event to a widget and every single one of its underlying Tkinter nodes."""
-        widget.bind("<MouseWheel>", self._forward_mouse_wheel)
-        # Scan through all internal Tkinter widgets hidden inside this CustomTkinter component
-        for child in widget.winfo_children():
-            child.bind("<MouseWheel>", self._forward_mouse_wheel)
-
-    def _forward_mouse_wheel(self, event):
-        """Passes mouse wheel spin signals straight to the parent frame container canvas."""
-        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
-            self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _toggle_folder_state(self, folder_path):
         """Swaps sub-folder states in memory and immediately triggers a sidebar redrawing pass."""
