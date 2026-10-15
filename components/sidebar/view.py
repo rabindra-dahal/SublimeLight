@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces fully optimized with universal mouse wheel forwarding hooks.
+and project workspaces equipped with enter/leave mousewheel focus isolation.
 """
 
 import os
@@ -46,31 +46,17 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.files_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # FIXED UNIVERSAL BINDING: Track the scroll wheel across EVERY element inside this sidebar pane frame
-        self._bind_mousewheel_globally()
+        # FIXED MOUSEWHEEL BINDING METHOD: Bind to entry and exit triggers to prevent competition with the text area
+        self.files_scroll_frame.bind("<Enter>", lambda e: self.files_scroll_frame.bind_all("<MouseWheel>", self._on_isolated_mouse_wheel))
+        self.files_scroll_frame.bind("<Leave>", lambda e: self.files_scroll_frame.unbind_all("<MouseWheel>"))
 
-    def _bind_mousewheel_globally(self):
-        """Binds the mouse wheel event to the entire widget tree to catch scrolls over text and buttons."""
-        self.files_scroll_frame.bind_all("<MouseWheel>", self._on_universal_mouse_wheel)
-
-    def _on_universal_mouse_wheel(self, event):
-        """Intercepts system wheel spin gestures and forces the canvas to slide fluidly if hovering over the sidebar."""
-        if not self.current_workspace_folder:
-            return
-            
-        try:
-            # 1. Grab current pixel coordinate location strings of your physical desktop mouse pointer
-            mouse_x, mouse_y = self.winfo_pointerxy()
-            # 2. Extract whatever UI widget node sits immediately directly underneath that pointer marker
-            active_target = self.winfo_containing(mouse_x, mouse_y)
-            
-            # 3. BOUNDARY CHECK: Only trigger if the user is explicitly hovering their mouse inside the explorer sidebar!
-            if active_target and (str(self) in str(active_target)):
-                if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
-                    # Send execution fractions directly down onto native Tkinter canvas scroll views
-                    self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        except:
-            pass
+    def _on_isolated_mouse_wheel(self, event):
+        """Scrolls the internal canvas exclusively when the sidebar has active hover focus."""
+        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
+            try:
+                self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except:
+                pass
 
     def _trigger_new_file(self):
         """Clears file state contexts to initialize a blank unpersisted document track inside a tab."""
@@ -140,7 +126,6 @@ class SidebarComponent(ctk.CTkFrame):
             else:
                 files.append((item, full_path))
 
-        # FIXED SORT PARAMETER: Grabs item name string indexes cleanly out of tuple collections
         folders.sort(key=lambda x: x[0].lower())
         files.sort(key=lambda x: x[0].lower())
 
@@ -234,8 +219,6 @@ class SidebarComponent(ctk.CTkFrame):
             if path and path != "untitled":
                 self.workspace_title_lbl.configure(text="STANDALONE FILE", text_color="#4b5263")
                 self.standalone_file_path = os.path.normpath(os.path.abspath(path))
-
-                
                 name = os.path.basename(path)
                 
                 self.standalone_file_btn.configure(text=f"  📄 {name}")
