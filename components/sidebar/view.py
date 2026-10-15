@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces equipped with enter/leave mousewheel focus isolation.
+and project workspaces fully integrated with focus-activated global scroll triggers.
 """
 
 import os
@@ -46,12 +46,21 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.files_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # FIXED MOUSEWHEEL BINDING METHOD: Bind to entry and exit triggers to prevent competition with the text area
-        self.files_scroll_frame.bind("<Enter>", lambda e: self.files_scroll_frame.bind_all("<MouseWheel>", self._on_isolated_mouse_wheel))
-        self.files_scroll_frame.bind("<Leave>", lambda e: self.files_scroll_frame.unbind_all("<MouseWheel>"))
+        # FIXED FOCUS-ACTIVATED SCROLL: Bind to entry/exit triggers on the root frame 
+        # to isolate global mouse wheel capture safely without touching the editor on the right!
+        self.bind("<Enter>", self._activate_sidebar_scroll)
+        self.bind("<Leave>", self._deactivate_sidebar_scroll)
 
-    def _on_isolated_mouse_wheel(self, event):
-        """Scrolls the internal canvas exclusively when the sidebar has active hover focus."""
+    def _activate_sidebar_scroll(self, event=None):
+        """Locks the global window scroll wheel track to move this sidebar panel frame when hovered."""
+        self.bind_all("<MouseWheel>", self._on_sidebar_scroll)
+
+    def _deactivate_sidebar_scroll(self, event=None):
+        """Instantly unbinds the scroll wheel listener the millisecond your cursor exits the sidebar boundaries."""
+        self.unbind_all("<MouseWheel>")
+
+    def _on_sidebar_scroll(self, event):
+        """Passes mouse wheel spin signals straight to the sidebar's parent canvas engine."""
         if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
             try:
                 self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -59,7 +68,7 @@ class SidebarComponent(ctk.CTkFrame):
                 pass
 
     def _trigger_new_file(self):
-        """Clears file state contexts to initialize a blank unpersisted document track inside a tab."""
+        """Clears file state contexts to initialize a blank document track inside a tab."""
         self.standalone_file_btn.pack_forget()
         self.standalone_file_path = None
         self.context.open_new_tab("untitled", "")
@@ -126,8 +135,8 @@ class SidebarComponent(ctk.CTkFrame):
             else:
                 files.append((item, full_path))
 
-        folders.sort(key=lambda x: x[0].lower())
-        files.sort(key=lambda x: x[0].lower())
+        folders.sort(key=lambda x: x.lower())
+        files.sort(key=lambda x: x.lower())
 
         # 1. DRAW SUB-FOLDERS
         for name, full_path in folders:
@@ -147,6 +156,10 @@ class SidebarComponent(ctk.CTkFrame):
                 command=lambda p=full_path: self._toggle_folder_state(p)
             )
             folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
+            
+            # FIXED SCROLL LINKING: Let parent entry focus handlers capture mouse gestures globally inside this frame
+            folder_btn.bind("<Enter>", self._activate_sidebar_scroll)
+            
             self.active_tree_widgets.append(folder_btn)
 
             if is_expanded:
@@ -168,6 +181,10 @@ class SidebarComponent(ctk.CTkFrame):
                 command=lambda p=full_path: self._load_file_from_sidebar(p)
             )
             file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
+            
+            # FIXED SCROLL LINKING: Let parent entry focus handlers capture mouse gestures globally inside this frame
+            file_btn.bind("<Enter>", self._activate_sidebar_scroll)
+            
             self.active_tree_widgets.append(file_btn)
 
     def _toggle_folder_state(self, folder_path):
@@ -221,5 +238,6 @@ class SidebarComponent(ctk.CTkFrame):
                 self.standalone_file_path = os.path.normpath(os.path.abspath(path))
                 name = os.path.basename(path)
                 
+
                 self.standalone_file_btn.configure(text=f"  📄 {name}")
                 self.standalone_file_btn.pack(fill="x", padx=5, pady=2, after=self.workspace_title_lbl)
