@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces fully integrated with focus-activated global scroll triggers.
+and project workspaces fully optimized for valid Windows layout calculations and scrollings.
 """
 
 import os
@@ -46,29 +46,8 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.files_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # FIXED FOCUS-ACTIVATED SCROLL: Bind to entry/exit triggers on the root frame 
-        # to isolate global mouse wheel capture safely without touching the editor on the right!
-        self.bind("<Enter>", self._activate_sidebar_scroll)
-        self.bind("<Leave>", self._deactivate_sidebar_scroll)
-
-    def _activate_sidebar_scroll(self, event=None):
-        """Locks the global window scroll wheel track to move this sidebar panel frame when hovered."""
-        self.bind_all("<MouseWheel>", self._on_sidebar_scroll)
-
-    def _deactivate_sidebar_scroll(self, event=None):
-        """Instantly unbinds the scroll wheel listener the millisecond your cursor exits the sidebar boundaries."""
-        self.unbind_all("<MouseWheel>")
-
-    def _on_sidebar_scroll(self, event):
-        """Passes mouse wheel spin signals straight to the sidebar's parent canvas engine."""
-        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
-            try:
-                self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except:
-                pass
-
     def _trigger_new_file(self):
-        """Clears file state contexts to initialize a blank document track inside a tab."""
+        """Clears file state contexts to initialize a blank unpersisted document track inside a tab."""
         self.standalone_file_btn.pack_forget()
         self.standalone_file_path = None
         self.context.open_new_tab("untitled", "")
@@ -117,7 +96,7 @@ class SidebarComponent(ctk.CTkFrame):
         self.files_scroll_frame.update_idletasks()
 
     def _render_directory_level(self, target_dir, indent_level):
-        """Recursive layout renderer sorting sub-folders to the top and indenting child files cleanly."""
+        """Recursive layout renderer sorting sub-folders to the top and indenting child files cleanly inside the true inner frame."""
         try:
             items = os.listdir(target_dir)
         except:
@@ -144,8 +123,9 @@ class SidebarComponent(ctk.CTkFrame):
             icon = "▼ 📂" if is_expanded else "▶ 📁"
             padding_left = 5 + (indent_level * 12) 
             
+            # FIXED MASTER TARGET: Mount elements directly to the internal .container box
             folder_btn = ctk.CTkButton(
-                self.files_scroll_frame,
+                master=self.files_scroll_frame.container,
                 text=f"{icon} {name}",
                 font=(config.FONT_UI, 12, "bold"),
                 fg_color="transparent",
@@ -157,8 +137,8 @@ class SidebarComponent(ctk.CTkFrame):
             )
             folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
             
-            # FIXED SCROLL LINKING: Let parent entry focus handlers capture mouse gestures globally inside this frame
-            folder_btn.bind("<Enter>", self._activate_sidebar_scroll)
+            # FIXED WINDOWS MOUSEWHEEL HOOK: Explicitly bind the scrolling motion to the button widget
+            folder_btn.bind("<MouseWheel>", self._on_windows_sidebar_scroll)
             
             self.active_tree_widgets.append(folder_btn)
 
@@ -169,8 +149,9 @@ class SidebarComponent(ctk.CTkFrame):
         for name, full_path in files:
             padding_left = 18 + (indent_level * 12) 
             
+            # FIXED MASTER TARGET: Mount elements directly to the internal .container box
             file_btn = ctk.CTkButton(
-                self.files_scroll_frame,
+                master=self.files_scroll_frame.container,
                 text=f"📄 {name}",
                 font=(config.FONT_UI, 11),
                 fg_color="transparent",
@@ -182,10 +163,18 @@ class SidebarComponent(ctk.CTkFrame):
             )
             file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
             
-            # FIXED SCROLL LINKING: Let parent entry focus handlers capture mouse gestures globally inside this frame
-            file_btn.bind("<Enter>", self._activate_sidebar_scroll)
+            # FIXED WINDOWS MOUSEWHEEL HOOK: Explicitly bind the scrolling motion to the button widget
+            file_btn.bind("<MouseWheel>", self._on_windows_sidebar_scroll)
             
             self.active_tree_widgets.append(file_btn)
+
+    def _on_windows_sidebar_scroll(self, event):
+        """Intercepts scroll ticks and manually slides CustomTkinter's native inner canvas."""
+        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
+            try:
+                self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except:
+                pass
 
     def _toggle_folder_state(self, folder_path):
         """Swaps sub-folder states in memory and immediately triggers a sidebar redrawing pass."""
@@ -238,6 +227,5 @@ class SidebarComponent(ctk.CTkFrame):
                 self.standalone_file_path = os.path.normpath(os.path.abspath(path))
                 name = os.path.basename(path)
                 
-
                 self.standalone_file_btn.configure(text=f"  📄 {name}")
                 self.standalone_file_btn.pack(fill="x", padx=5, pady=2, after=self.workspace_title_lbl)
