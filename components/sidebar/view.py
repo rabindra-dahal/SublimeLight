@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces equipped with valid sorting metrics and mouse wheel handlers.
+and project workspaces equipped with valid sorting metrics and all-element mouse wheel handlers.
 """
 
 import os
@@ -118,8 +118,8 @@ class SidebarComponent(ctk.CTkFrame):
             else:
                 files.append((item, full_path))
 
-        folders.sort(key=lambda x: x[0].lower())
-        files.sort(key=lambda x: x[0].lower())
+        folders.sort(key=lambda x: x.lower())
+        files.sort(key=lambda x: x.lower())
 
         # 1. DRAW SUB-FOLDERS
         for name, full_path in folders:
@@ -140,10 +140,8 @@ class SidebarComponent(ctk.CTkFrame):
             )
             folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
             
-            # CRITICAL WINDOWS SCROLL FIX: Bind wheel event to the button AND its internal text label element
-            folder_btn.bind("<MouseWheel>", self._forward_mouse_wheel)
-            if hasattr(folder_btn, "_text_label") and folder_btn._text_label:
-                folder_btn._text_label.bind("<MouseWheel>", self._forward_mouse_wheel)
+            # FIXED ABSOLUTE SCROLL HOOK: Recursively bind wheel event to the widget and all its inner components
+            self._bind_mouse_wheel_recursive(folder_btn)
             
             self.active_tree_widgets.append(folder_btn)
 
@@ -167,12 +165,17 @@ class SidebarComponent(ctk.CTkFrame):
             )
             file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
             
-            # CRITICAL WINDOWS SCROLL FIX: Bind wheel event to the button AND its internal text label element
-            file_btn.bind("<MouseWheel>", self._forward_mouse_wheel)
-            if hasattr(file_btn, "_text_label") and file_btn._text_label:
-                file_btn._text_label.bind("<MouseWheel>", self._forward_mouse_wheel)
+            # FIXED ABSOLUTE SCROLL HOOK: Recursively bind wheel event to the widget and all its inner components
+            self._bind_mouse_wheel_recursive(file_btn)
             
             self.active_tree_widgets.append(file_btn)
+
+    def _bind_mouse_wheel_recursive(self, widget):
+        """Recursively binds the scroll event to a widget and every single one of its underlying Tkinter nodes."""
+        widget.bind("<MouseWheel>", self._forward_mouse_wheel)
+        # Scan through all internal Tkinter widgets hidden inside this CustomTkinter component
+        for child in widget.winfo_children():
+            child.bind("<MouseWheel>", self._forward_mouse_wheel)
 
     def _forward_mouse_wheel(self, event):
         """Passes mouse wheel spin signals straight to the parent frame container canvas."""
