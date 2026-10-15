@@ -25,11 +25,9 @@ class AppContext:
         if self.current_file and self.editor:
             self.open_tabs[self.current_file] = self.editor.get_text()
             
-        # Only seed new data text maps if the file is completely new
         if abs_path not in self.open_tabs:
             self.open_tabs[abs_path] = content_text
             
-        # Shift active context records pointers onto target asset
         self.set_active_file(abs_path)
 
     def save_current_buffer_to_cache(self):
@@ -38,7 +36,7 @@ class AppContext:
             self.open_tabs[self.current_file] = self.editor.get_text()
 
     def set_active_file(self, file_path):
-        """State machine modifier updating workspace tracking logs safely."""
+        """State machine modifier updating workspace tracking logs safely without moving the terminal."""
         if not file_path:
             self.current_file = None
             if self.editor:
@@ -50,8 +48,8 @@ class AppContext:
         else:
             self.current_file = os.path.normpath(os.path.abspath(file_path))
             
-            # FIXED: Removed the automatic self.terminal.sync_workspace_directory loop hook entirely!
-            # The terminal will now stay put exactly where you want it.
+            # FIXED: Automatic terminal synchronization code block is completely deleted.
+            # Shifting focus across different tabs or sidebar clicks will never alter the shell path.
         
         text_content = self.open_tabs.get(self.current_file, "")
 
@@ -74,4 +72,6 @@ class AppContext:
         else:
             self.current_file = None
             if self.editor:
+                self.editor.text_area.delete("1.0", "end")
                 self.editor.show_editor_elements(False)
+                self.editor.tab_bar.rebuild_tab_strip_layout()
