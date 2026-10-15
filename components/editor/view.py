@@ -1,6 +1,7 @@
 """
 SublimeLight - Editor Component View
-Central master framework parsing input actions and orchestrating dynamic tab displays.
+Central master framework parsing input actions and orchestrating dynamic tab displays
+safely leveraging CustomTkinter's native scroll mechanics without routing locks.
 """
 
 import re
@@ -28,15 +29,13 @@ class EditorComponent(ctk.CTkFrame):
         self.line_numbers = LineNumbersComponent(self.content_area)
 
         # 3. Code Text Editor Area Box
+        # FIXED: Native activate_scrollbars=True handles rendering out of the box cleanly
         self.text_area = ctk.CTkTextbox(
             self.content_area, font=config.FONT_EDITOR, fg_color=config.COLOR_BG,
             text_color=config.COLOR_TEXT, corner_radius=0, border_width=0, activate_scrollbars=True
         )
         self.text_area._textbox.configure(insertbackground=config.COLOR_TEXT)
         self._setup_syntax_tags()
-        
-        # FIXED: Pass scroll control commands cleanly to let the native text viewport slide smoothly
-        self.text_area._textbox.configure(yscrollcommand=self._custom_scrollbar_router)
         
         # Bind Event Synchronization Listeners
         self.text_area.bind("<KeyRelease>", self._on_editor_action)
@@ -45,17 +44,6 @@ class EditorComponent(ctk.CTkFrame):
         self.text_area.bind("<F5>", self._trigger_code_execution)
         
         self.show_editor_elements(False)
-
-    def _custom_scrollbar_router(self, *args):
-        """Passes scroll fraction settings to both the scrollbar and line numbers safely."""
-        if hasattr(self.text_area, "_scrollbar") and self.text_area._scrollbar:
-            self.text_area._scrollbar.set(*args)
-            
-        if self.editor_elements_visible and len(args) >= 2:
-            try:
-                self.line_numbers._textbox.yview_moveto(args[0])
-            except:
-                pass
 
     def show_editor_elements(self, visible=True):
         self.editor_elements_visible = visible
@@ -110,7 +98,7 @@ class EditorComponent(ctk.CTkFrame):
             tk_text.tag_add("COMMENT", f"{line_num}.{match.start()}", f"{line_num}.{match.end()}")
             line_text = line_text[:match.start()] + (" " * (match.end() - match.start()))
 
-        string_pattern = r'("(?:[^"\\]|\\.)*")|(\'(?:[^\'\\]|\\.)*\')'
+        string_pattern = r'("(?:[^"\\]|\\.)*")|(\'/d/ML/github-mine/SublimeLight\'(?:[^\'\\]|\\.)*\')'
         for match in re.finditer(string_pattern, line_text):
             tk_text.tag_add("STRING", f"{line_num}.{match.start()}", f"{line_num}.{match.end()}")
             line_text = line_text[:match.start()] + (" " * (match.end() - match.start()))
