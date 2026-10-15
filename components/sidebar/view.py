@@ -1,7 +1,7 @@
 """
 SublimeLight - Sidebar Component View
 Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces fully integrated with a stable multi-tab context engine.
+and project workspaces equipped with valid sorting metrics and mouse wheel handlers.
 """
 
 import os
@@ -17,8 +17,8 @@ class SidebarComponent(ctk.CTkFrame):
         self.pack_propagate(False)   
         
         self.current_workspace_folder = None
-        self.active_tree_widgets = [] # Track dynamic list and frame elements for clean redraws
-        self.expanded_folders = set() # Track which paths are expanded: {absolute_folder_path_string}
+        self.active_tree_widgets = [] 
+        self.expanded_folders = set() 
 
         # --- Sidebar Actions Layout Assembly ---
         self.folders_label = ctk.CTkLabel(
@@ -33,7 +33,6 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.workspace_title_lbl.pack(fill="x", padx=15, pady=(10, 5))
 
-        # Standalone file tracker indicator element shell (used when no folder project is open)
         self.standalone_file_btn = ctk.CTkButton(
             self, text="", font=(config.FONT_UI, 12),
             fg_color="transparent", text_color=config.COLOR_TEXT,
@@ -76,11 +75,9 @@ class SidebarComponent(ctk.CTkFrame):
         folder_name = os.path.basename(self.current_workspace_folder).upper()
         self.workspace_title_lbl.configure(text=folder_name, text_color="#5c6370")
         
-        # ONE-TIME INITIALIZATION SYNC: Force the terminal to jump to the newly opened folder path 
         if self.context and self.context.terminal:
             self.context.terminal.sync_workspace_directory(self.current_workspace_folder)
         
-        # Always expand the root workspace directory folder cleanly right on boot up
         self.expanded_folders.add(self.current_workspace_folder)
         self.refresh_workspace_tree()
 
@@ -91,7 +88,7 @@ class SidebarComponent(ctk.CTkFrame):
         self.active_tree_widgets.clear()
 
     def refresh_workspace_tree(self):
-        """Triggers a clean passes of your folder structures and forces scrollbar boundary calculations."""
+        """Triggers a clean pass of your folder structures and updates scroll parameters."""
         if not self.current_workspace_folder:
             return
         self._clear_tree_widgets()
@@ -99,17 +96,8 @@ class SidebarComponent(ctk.CTkFrame):
         # 1. Execute the recursive rendering pass to repack all expanded/collapsed elements
         self._render_directory_level(self.current_workspace_folder, indent_level=0)
         
-        # 2. FIXED: Force the Tkinter container layout engine to immediately compute updated height boundaries
+        # 2. Force the container layout engine to immediately compute updated height boundaries
         self.files_scroll_frame.update_idletasks()
-        
-        # 3. FIXED: Reconfigure the canvas scrollregion boundaries so scrolling behaves fluidly on large lists
-        if hasattr(self.files_scroll_frame, "_canvas"):
-            try:
-                self.files_scroll_frame._canvas.configure(
-                    scrollregion=self.files_scroll_frame._canvas.bbox("all")
-                )
-            except:
-                pass
 
     def _render_directory_level(self, target_dir, indent_level):
         """Recursive layout renderer sorting sub-folders to the top and indenting child files cleanly."""
@@ -118,12 +106,11 @@ class SidebarComponent(ctk.CTkFrame):
         except:
             return
 
-        # Separate items into folders and files
         folders = []
         files = []
         
         for item in items:
-            if item.startswith('.'): # Ignore hidden internal directories/files
+            if item.startswith('.'): 
                 continue
             full_path = os.path.join(target_dir, item)
             if os.path.isdir(full_path):
@@ -131,7 +118,6 @@ class SidebarComponent(ctk.CTkFrame):
             else:
                 files.append((item, full_path))
 
-        # Sort alphabetically
         folders.sort(key=lambda x: x[0].lower())
         files.sort(key=lambda x: x[0].lower())
 
@@ -139,29 +125,34 @@ class SidebarComponent(ctk.CTkFrame):
         for name, full_path in folders:
             is_expanded = full_path in self.expanded_folders
             icon = "▼ 📂" if is_expanded else "▶ 📁"
-            padding_left = 5 + (indent_level * 12) # Dynamically calculate layout indent spaces
+            padding_left = 5 + (indent_level * 12) 
             
             folder_btn = ctk.CTkButton(
                 self.files_scroll_frame,
                 text=f"{icon} {name}",
                 font=(config.FONT_UI, 12, "bold"),
                 fg_color="transparent",
-                text_color="#a6e22e", # Distinct green shade label for directories
+                text_color="#a6e22e", 
                 hover_color="#2c313c",
                 anchor="w",
                 height=22,
                 command=lambda p=full_path: self._toggle_folder_state(p)
             )
             folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
+            
+            # CRITICAL WINDOWS SCROLL FIX: Bind wheel event to the button AND its internal text label element
+            folder_btn.bind("<MouseWheel>", self._forward_mouse_wheel)
+            if hasattr(folder_btn, "_text_label") and folder_btn._text_label:
+                folder_btn._text_label.bind("<MouseWheel>", self._forward_mouse_wheel)
+            
             self.active_tree_widgets.append(folder_btn)
 
-            # If folder state register is flagged as expanded, run recursive pass on its sub-directory layout paths
             if is_expanded:
                 self._render_directory_level(full_path, indent_level + 1)
 
         # 2. DRAW CHILD FILES
         for name, full_path in files:
-            padding_left = 18 + (indent_level * 12) # Pad files slightly further right than parent folders
+            padding_left = 18 + (indent_level * 12) 
             
             file_btn = ctk.CTkButton(
                 self.files_scroll_frame,
@@ -172,10 +163,21 @@ class SidebarComponent(ctk.CTkFrame):
                 hover_color="#2c313c",
                 anchor="w",
                 height=22,
-                command=lambda p=full_file_path if 'full_file_path' in locals() else full_path: self._load_file_from_sidebar(p)
+                command=lambda p=full_path: self._load_file_from_sidebar(p)
             )
             file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
+            
+            # CRITICAL WINDOWS SCROLL FIX: Bind wheel event to the button AND its internal text label element
+            file_btn.bind("<MouseWheel>", self._forward_mouse_wheel)
+            if hasattr(file_btn, "_text_label") and file_btn._text_label:
+                file_btn._text_label.bind("<MouseWheel>", self._forward_mouse_wheel)
+            
             self.active_tree_widgets.append(file_btn)
+
+    def _forward_mouse_wheel(self, event):
+        """Passes mouse wheel spin signals straight to the parent frame container canvas."""
+        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
+            self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _toggle_folder_state(self, folder_path):
         """Swaps sub-folder states in memory and immediately triggers a sidebar redrawing pass."""
@@ -222,10 +224,11 @@ class SidebarComponent(ctk.CTkFrame):
         self.refresh_workspace_tree()
 
     def update_file_label(self, path):
-        if not self.current_workspace_folder and path and path != "untitled":
-            self.workspace_title_lbl.configure(text="STANDALONE FILE", text_color="#4b5263")
-            self.standalone_file_path = os.path.normpath(os.path.abspath(path))
-            name = os.path.basename(path)
-            
-            self.standalone_file_btn.configure(text=f"  📄 {name}")
-            self.standalone_file_btn.pack(fill="x", padx=5, pady=2, after=self.workspace_title_lbl)
+        if not self.current_workspace_folder:
+            if path and path != "untitled":
+                self.workspace_title_lbl.configure(text="STANDALONE FILE", text_color="#4b5263")
+                self.standalone_file_path = os.path.normpath(os.path.abspath(path))
+                name = os.path.basename(path)
+                
+                self.standalone_file_btn.configure(text=f"  📄 {name}")
+                self.standalone_file_btn.pack(fill="x", padx=5, pady=2, after=self.workspace_title_lbl)
