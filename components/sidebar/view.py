@@ -1,13 +1,14 @@
 """
 SublimeLight - Sidebar Component View
-Handles nested directory operations, sub-folder tree exploration grids,
-and project workspaces fully optimized for valid Windows layout calculations and scrollings.
+Handles directory operations, folder workspaces, and orchestrates decentralized sub-modules.
 """
 
 import os
 import customtkinter as ctk
 import config
 from services.file_service import FileService
+from .tree_builder import TreeBuilder
+from .tree_node import TreeNodeButton
 
 class SidebarComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
@@ -47,23 +48,19 @@ class SidebarComponent(ctk.CTkFrame):
         self.files_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
     def _trigger_new_file(self):
-        """Clears file state contexts to initialize a blank unpersisted document track inside a tab."""
         self.standalone_file_btn.pack_forget()
         self.standalone_file_path = None
         self.context.open_new_tab("untitled", "")
 
     def _trigger_open_file(self):
-        """Loads a standalone individual file selection directly into a new tab container."""
         path, text = FileService.read_file()
         if path is not None:
             self.current_workspace_folder = None
             self._clear_tree_widgets()
-            
             norm_path = os.path.normpath(os.path.abspath(path))
             self.context.open_new_tab(norm_path, text)
 
     def _trigger_open_folder(self):
-        """Scans a selected folder directory and populates file lists onto the sidebar view panel."""
         folder_path = ctk.filedialog.askdirectory(mustexist=True)
         if not folder_path:
             return
@@ -82,13 +79,11 @@ class SidebarComponent(ctk.CTkFrame):
         self.refresh_workspace_tree()
 
     def _clear_tree_widgets(self):
-        """Wipes old visual widgets out of the sidebar tree block safely."""
         for widget in self.active_tree_widgets:
             widget.destroy()
         self.active_tree_widgets.clear()
 
     def refresh_workspace_tree(self):
-        """Triggers a clean pass of your folder structures and updates scroll parameters."""
         if not self.current_workspace_folder:
             return
         self._clear_tree_widgets()
@@ -96,88 +91,43 @@ class SidebarComponent(ctk.CTkFrame):
         self.files_scroll_frame.update_idletasks()
 
     def _render_directory_level(self, target_dir, indent_level):
-        """Recursive layout renderer sorting sub-folders to the top and indenting child files cleanly inside the true inner frame."""
-        try:
-            items = os.listdir(target_dir)
-        except:
-            return
+        """Delegates path processing up onto specialized modules and mounts nodes cleanly inside the canvas view."""
+        folders, files = TreeBuilder.scan_and_sort_directory(target_dir)
 
-        folders = []
-        files = []
-        
-        for item in items:
-            if item.startswith('.'): 
-                continue
-            full_path = os.path.join(target_dir, item)
-            if os.path.isdir(full_path):
-                folders.append((item, full_path))
-            else:
-                files.append((item, full_path))
-
-        folders.sort(key=lambda x: x.lower())
-        files.sort(key=lambda x: x.lower())
-
-        # 1. DRAW SUB-FOLDERS
+        # 1. MOUNT SORTED SUB-FOLDERS
         for name, full_path in folders:
             is_expanded = full_path in self.expanded_folders
-            icon = "▼ 📂" if is_expanded else "▶ 📁"
-            padding_left = 5 + (indent_level * 12) 
             
-            # FIXED MASTER TARGET: Mount elements directly to the internal .container box
-            folder_btn = ctk.CTkButton(
-                master=self.files_scroll_frame.container,
-                text=f"{icon} {name}",
-                font=(config.FONT_UI, 12, "bold"),
-                fg_color="transparent",
-                text_color="#a6e22e", 
-                hover_color="#2c313c",
-                anchor="w",
-                height=22,
-                command=lambda p=full_path: self._toggle_folder_state(p)
+            # STANDARD PASSTHROUGH: Pass self.files_scroll_frame directly as master parent
+            folder_node = TreeNodeButton(
+                master=self.files_scroll_frame,
+                name=name, full_path=full_path,
+                is_folder=True, is_expanded=is_expanded,
+                indent_level=indent_level,
+                toggle_cmd=self._toggle_folder_state,
+                load_cmd=self._load_file_from_sidebar,
+                scroll_frame=self.files_scroll_frame
             )
-            folder_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
-            
-            # FIXED WINDOWS MOUSEWHEEL HOOK: Explicitly bind the scrolling motion to the button widget
-            folder_btn.bind("<MouseWheel>", self._on_windows_sidebar_scroll)
-            
-            self.active_tree_widgets.append(folder_btn)
+            self.active_tree_widgets.append(folder_node)
 
             if is_expanded:
                 self._render_directory_level(full_path, indent_level + 1)
 
-        # 2. DRAW CHILD FILES
+        # 2. MOUNT SORTED FILES
         for name, full_path in files:
-            padding_left = 18 + (indent_level * 12) 
-            
-            # FIXED MASTER TARGET: Mount elements directly to the internal .container box
-            file_btn = ctk.CTkButton(
-                master=self.files_scroll_frame.container,
-                text=f"📄 {name}",
-                font=(config.FONT_UI, 11),
-                fg_color="transparent",
-                text_color=config.COLOR_TEXT,
-                hover_color="#2c313c",
-                anchor="w",
-                height=22,
-                command=lambda p=full_path: self._load_file_from_sidebar(p)
+            # STANDARD PASSTHROUGH: Pass self.files_scroll_frame directly as master parent
+            file_node = TreeNodeButton(
+                master=self.files_scroll_frame,
+                name=name, full_path=full_path,
+                is_folder=False, is_expanded=False,
+                indent_level=indent_level,
+                toggle_cmd=self._toggle_folder_state,
+                load_cmd=self._load_file_from_sidebar,
+                scroll_frame=self.files_scroll_frame
             )
-            file_btn.pack(fill="x", padx=(padding_left, 5), pady=1)
-            
-            # FIXED WINDOWS MOUSEWHEEL HOOK: Explicitly bind the scrolling motion to the button widget
-            file_btn.bind("<MouseWheel>", self._on_windows_sidebar_scroll)
-            
-            self.active_tree_widgets.append(file_btn)
-
-    def _on_windows_sidebar_scroll(self, event):
-        """Intercepts scroll ticks and manually slides CustomTkinter's native inner canvas."""
-        if hasattr(self.files_scroll_frame, "_canvas") and self.files_scroll_frame._canvas:
-            try:
-                self.files_scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except:
-                pass
+            self.active_tree_widgets.append(file_node)
 
     def _toggle_folder_state(self, folder_path):
-        """Swaps sub-folder states in memory and immediately triggers a sidebar redrawing pass."""
         if folder_path in self.expanded_folders:
             self.expanded_folders.remove(folder_path)
         else:
@@ -203,7 +153,6 @@ class SidebarComponent(ctk.CTkFrame):
         
         if saved_path:
             norm_saved_path = os.path.normpath(os.path.abspath(saved_path))
-            
             if self.context.current_file == "untitled" and "untitled" in self.context.open_tabs:
                 del self.context.open_tabs["untitled"]
                 

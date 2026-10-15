@@ -1,7 +1,6 @@
 """
 SublimeLight - Editor Component View
-Central master framework parsing input actions and orchestrating dynamic tab displays
-safely guarded with state lock mutex flags to prevent buffer overwrites.
+Central master framework parsing input actions and orchestrating dynamic tab displays.
 """
 
 import re
@@ -16,8 +15,6 @@ class EditorComponent(ctk.CTkFrame):
         self.context = context
         self.context.editor = self 
         self.editor_elements_visible = False
-        
-        # MUTEX STATE LOCK FLAG: Prevents rapid event triggers from causing loop feedback recursion cascades
         self.is_switching_tabs = False
 
         # 1. Mount Top Closeable Multi-Tab Row Strip Bar
@@ -30,6 +27,7 @@ class EditorComponent(ctk.CTkFrame):
 
         self.line_numbers = LineNumbersComponent(self.content_area)
 
+        # 3. Code Text Editor Area Box
         self.text_area = ctk.CTkTextbox(
             self.content_area, font=config.FONT_EDITOR, fg_color=config.COLOR_BG,
             text_color=config.COLOR_TEXT, corner_radius=0, border_width=0, activate_scrollbars=True
@@ -37,8 +35,7 @@ class EditorComponent(ctk.CTkFrame):
         self.text_area._textbox.configure(insertbackground=config.COLOR_TEXT)
         self._setup_syntax_tags()
         
-        # Capture native scroll hook commands directly into router loops
-        self._original_customtkinter_scroll = self.text_area._textbox.cget("yscrollcommand")
+        # FIXED: Pass scroll control commands cleanly to let the native text viewport slide smoothly
         self.text_area._textbox.configure(yscrollcommand=self._custom_scrollbar_router)
         
         # Bind Event Synchronization Listeners
@@ -54,15 +51,11 @@ class EditorComponent(ctk.CTkFrame):
         if hasattr(self.text_area, "_scrollbar") and self.text_area._scrollbar:
             self.text_area._scrollbar.set(*args)
             
-        # STABLE MULTI-TAB SCROLL ROUTER: Isolate the single float fraction coordinate from tuple sets
         if self.editor_elements_visible and len(args) >= 2:
-            if args[0] == 'moveto':
-                self.line_numbers._textbox.yview_moveto(args[1])
-            elif args[0] == 'scroll':
-                self.line_numbers._textbox.yview_scroll(args[1], args[2])
-            else:
-                # FIXED: Pick out ONLY the first coordinate fraction scalar float item (args[0])
+            try:
                 self.line_numbers._textbox.yview_moveto(args[0])
+            except:
+                pass
 
     def show_editor_elements(self, visible=True):
         self.editor_elements_visible = visible
@@ -77,16 +70,12 @@ class EditorComponent(ctk.CTkFrame):
     def render_tab_switch_state(self, active_path, text_content):
         """Fires from context layer to update active workspace tab configurations securely."""
         if active_path:
-            # Raise state lock flag to stop editor action callback handlers from running
             self.is_switching_tabs = True
-            
             self.show_editor_elements(True)
             self.text_area.delete("1.0", "end")
             self.text_area.insert("1.0", text_content)
             self.highlight_full_document()
             self.update_line_count()
-            
-            # Lower state lock flag once text insertion routines conclude completely
             self.is_switching_tabs = False
         else:
             self.show_editor_elements(False)
@@ -94,7 +83,6 @@ class EditorComponent(ctk.CTkFrame):
         self.tab_bar.rebuild_tab_strip_layout()
 
     def set_text(self, text, file_path=None):
-        """Wired from sidebar actions picker to instantiate an open tab asset."""
         target_path = file_path if file_path else "untitled"
         if self.context:
             self.context.open_new_tab(target_path, text)
@@ -139,7 +127,6 @@ class EditorComponent(ctk.CTkFrame):
         if not self.editor_elements_visible:
             return
         end_idx = self.text_area.index("end-1c")
-        # FIXED CRITICAL PATH: Added zero slice index [0] to parse row digits safely from split lists
         total_lines = int(end_idx.split(".")[0])  
         for line in range(1, total_lines + 1):
             self.highlight_line(line)
@@ -148,14 +135,12 @@ class EditorComponent(ctk.CTkFrame):
         if not self.editor_elements_visible:
             return
         end_index = self.text_area.index("end-1c")
-        # FIXED CRITICAL PATH: Added zero slice index [0] to parse row digits safely from split lists
         total_lines = int(end_index.split(".")[0])  
         self.line_numbers.redraw(total_lines)
 
     def _on_intercept_keypress(self, event=None):
         if not self.editor_elements_visible or self.is_switching_tabs:
             return
-        # FIXED CRITICAL PATH: Added zero slice index [0] to parse row digits safely from split lists
         current_line = int(self.text_area.index("insert").split(".")[0])  
         self.after(1, lambda: self.highlight_line(current_line))
 
