@@ -3,8 +3,7 @@ SublimeLight - Core Entry Point
 
 This file serves as the Application Bootstrapper / Composition Root. 
 It instantiates the central state orchestration context, initializes the 
-independent frontend components, maps a minimal navigation bar, and handles
-automatic cross-session project folder persistence.
+independent frontend components, centers your window matrix, and loads session caches.
 """
 
 import os
@@ -25,10 +24,16 @@ class SublimeLightApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        # 1. Initialize Window Configurations
+        # 1. Initialize Window Configurations & Apply Screen Centering Math
         self.title("Sublime Light - Python Editor")
-        self.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}")
         self.configure(fg_color=config.COLOR_BG)
+        
+        # Center layout window calculation blocks
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width // 2) - (config.WINDOW_WIDTH // 2)
+        y = (screen_height // 2) - (config.WINDOW_HEIGHT // 2)
+        self.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}+{x}+{y}")
 
         # 2. Boot Central Orchestrator Domain Context Engine
         self.context = AppContext(self)
@@ -60,13 +65,12 @@ class SublimeLightApp(ctk.CTk):
         self.bind("<Control-o>", lambda event: self._dispatch_open_file())
         self.bind("<Control-s>", lambda event: self._dispatch_save_file())
         self.bind("<Control-d>", lambda event: self._dispatch_open_folder())
-
+        
+        # Core utility keys bindings channels
         self.bind("<KeyPress-F5>", lambda event: self._dispatch_execute_script())
-        # Hotkey: Maps Control + F5 to instantly open a standalone native command prompt window
         self.bind("<Control-F5>", lambda event: self._dispatch_launch_native_cmd())
 
-        # 7. AUTOMATED SESSION RESTORATION CHECK
-        # We wait 50ms for the UI layout components to settle before triggering the folder load pass
+        # 7. Automated Session Cache Loading Hook
         self.after(50, self._load_previous_session)
 
     def _create_top_menu_bar(self):
@@ -92,7 +96,6 @@ class SublimeLightApp(ctk.CTk):
         self.config(menu=menu_bar)
 
     def _save_session_state(self, folder_path):
-        """Writes the absolute target workspace folder path cleanly onto a localized session cache."""
         try:
             state_data = {"last_workspace_folder": os.path.normpath(os.path.abspath(folder_path))}
             with open(SESSION_CACHE_FILE, "w", encoding="utf-8") as f:
@@ -101,15 +104,12 @@ class SublimeLightApp(ctk.CTk):
             pass
 
     def _load_previous_session(self):
-        """Reads the local session tracking file and auto-populates the sidebar directory tree on boot."""
         if not os.path.exists(SESSION_CACHE_FILE):
             return
         try:
             with open(SESSION_CACHE_FILE, "r", encoding="utf-8") as f:
                 state_data = json.load(f)
                 previous_folder = state_data.get("last_workspace_folder")
-                
-                # Verify that the cached workspace directory path still exists physically on your disk drive
                 if previous_folder and os.path.exists(previous_folder) and os.path.isdir(previous_folder):
                     if self.sidebar:
                         self.sidebar.current_workspace_folder = os.path.normpath(previous_folder)
@@ -129,7 +129,6 @@ class SublimeLightApp(ctk.CTk):
 
     def _dispatch_open_folder(self):
         if self.context and self.context.sidebar:
-            # Re-intercept the standard trigger option to record selection path variables
             self.context.sidebar._trigger_open_folder()
             if self.sidebar and self.sidebar.current_workspace_folder:
                 self._save_session_state(self.sidebar.current_workspace_folder)
@@ -139,32 +138,25 @@ class SublimeLightApp(ctk.CTk):
             self.context.sidebar._trigger_save()
 
     def _dispatch_execute_script(self):
-        """Saves current file and sends its path straight to the external console window runner."""
         self._dispatch_save_file()
         if self.context and self.context.current_file:
             RunnerService.execute_script(self.context.current_file)
 
     def _dispatch_launch_native_cmd(self):
-        """Spawns a standard Windows command prompt process locked to your active project path context."""
         import subprocess
-        
         target_dir = os.getcwd()
         if self.sidebar and self.sidebar.current_workspace_folder:
             target_dir = self.sidebar.current_workspace_folder
         elif self.context and self.context.current_file and os.path.exists(self.context.current_file):
             if os.path.isfile(self.context.current_file):
                 target_dir = os.path.dirname(self.context.current_file)
-
         try:
-            subprocess.Popen(
-                ["cmd.exe"],
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                cwd=target_dir
-            )
+            subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=target_dir)
         except Exception as e:
             from tkinter import messagebox
             messagebox.showerror("Terminal Error", f"Failed to initialize system console: {e}")
 
 if __name__ == "__main__":
+    ctk.set_appearance_mode("Dark")  # Force CustomTkinter baseline to stay locked to Dark mode
     app = SublimeLightApp()
     app.mainloop()

@@ -1,7 +1,7 @@
 """
 SublimeLight - Core Editor Component View
 Provides a smooth, high-performance programming canvas equipped with real-time 
-line numbering, Monokai syntax highlighting, smart auto-brackets matching, and font size scaling.
+line numbering, stable Monokai syntax highlighting, smart auto-brackets matching, and font size scaling.
 """
 
 import tkinter as tk
@@ -20,9 +20,9 @@ class EditorComponent(ctk.CTkFrame):
 
         self.is_switching_tabs = False
         self.editor_elements_visible = True
-
-        # --- FONT SIZE SCALING VARIABLES ---
-        self.current_font_size = 12  # Standard crisp coding default font size Baseline
+        
+        # --- ACCESSIBILITY STATE TRACKER ---
+        self.current_font_size = 12  # Standard crisp coding default font size baseline
 
         # 1. Top Tab Strip Bar Controller
         self.tab_bar = TabBarComponent(self, self.context)
@@ -58,7 +58,7 @@ class EditorComponent(ctk.CTkFrame):
         # 3. REAL-TIME SIGNAL KEY BINDINGS INTERCEPT NETWORKS
         self.text_area.bind("<KeyRelease>", self._on_editor_content_change)
         
-        # FIXED: Hook up the smart keyboard auto-brackets intercept handler natively
+        # Smart keyboard auto-brackets intercept handler natively
         self.text_area.bind("<Key>", self._handle_auto_pair_keystrokes)
         
         # Safe Asynchronous Scroll Sync Binding Hooks
@@ -83,21 +83,13 @@ class EditorComponent(ctk.CTkFrame):
         
         char = event.char
         if char in pairs:
-            # 1. Insert both opening character and closing pair right at the typing cursor position
             self.text_area.insert("insert", char + pairs[char])
-            
-            # 2. Shift typing insertion caret back 1 space to rest right between the symbols
             self.text_area.mark_set("insert", "insert-1c")
-            
-            # Sync rendering layers and save changes to active document buffer cache
             self.update_line_count()
             self.highlight_full_document()
             if self.context:
                 self.context.save_current_buffer_to_cache()
-                
-            # Intercept event execution track to block Tkinter from printing duplicate keys
             return "break"
-            
         return None
 
     def _adjust_editor_font_scale(self, change_delta):
@@ -131,8 +123,10 @@ class EditorComponent(ctk.CTkFrame):
             return
         self.line_numbers.configure(state="normal")
         self.line_numbers.delete("1.0", "end")
+        
+        # Safe integer extraction row selector snippet
         total_lines = int(self.text_area.index("end-1c").split(".")[0])
-
+        
         line_number_string = "\n".join(str(i) for i in range(1, total_lines + 1))
         self.line_numbers.insert("1.0", line_number_string)
         self.line_numbers.configure(state="disabled")
@@ -167,7 +161,6 @@ class EditorComponent(ctk.CTkFrame):
             for match in re.finditer(pattern, code_text):
                 start_offset = match.start()
                 end_offset = match.end()
-                
                 start_idx = self.text_area.index(f"1.0 + {start_offset} chars")
                 end_idx = self.text_area.index(f"1.0 + {end_offset} chars")
                 self.text_area.tag_add(tag_name, start_idx, end_idx)
