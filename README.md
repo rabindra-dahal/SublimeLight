@@ -95,7 +95,6 @@ python main.py
 | `F5` | Saves current editor updates and launches the script inside a native console window |
 | `Ctrl + F5` | Spawns a standard Windows Command Prompt session pointing directly to your active directory |
 | `Ctrl + F` | Toggles display anchors for the modular Find and Replace search banner grid |
-| `Ctrl + T` | Dedicated global key registry tracking loop for theme operations |
 | `Ctrl + Plus` | Increases text size readability across typing canvases and row columns synchronously |
 | `Ctrl + Minus` | Decreases text font size leading safely down to a stable 8pt baseline constraint |
 
