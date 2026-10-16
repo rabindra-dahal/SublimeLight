@@ -1,7 +1,7 @@
 """
 SublimeLight - Core Editor Component View
 Provides a clean, modular programming canvas backed by decoupled search panels,
-independent regex token syntax highlight engines, and smart layout formatting.
+independent regex token syntax highlight engines, and structural macro snippet engine modules.
 """
 
 import tkinter as tk
@@ -12,6 +12,7 @@ import config
 from .tab_bar import TabBarComponent
 from .search_panel import SearchPanelComponent
 from .highlighter import SyntaxHighlighter
+from .snippet_engine import SnippetEngine
 
 class EditorComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
@@ -29,7 +30,6 @@ class EditorComponent(ctk.CTkFrame):
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        # Mount layouts row-by-row
         self.tab_bar = TabBarComponent(self, self.context)
         self.tab_bar.grid(row=0, column=0, sticky="ew")
 
@@ -48,17 +48,20 @@ class EditorComponent(ctk.CTkFrame):
         )
         self.text_area.pack(side="right", fill="both", expand=True)
 
-        # --- EXTENSION INITIALIZATIONS ---
+        # --- EXTENSION MODULE LAYERS INITIALIZATION ---
         self.highlighter = SyntaxHighlighter(self.text_area)
         self.find_panel = SearchPanelComponent(
-            self, self.text_area, self.update_line_count, 
-            self.highlighter.highlight, self.context
+            self, self.text_area, self.update_line_count, self.highlighter.highlight, self.context
+        )
+        self.snippet_engine = SnippetEngine(
+            self.text_area, self.update_line_count, self.highlighter.highlight, self.context
         )
 
         # --- EVENT INTERCEPTS BINDINGS ---
         self.text_area.bind("<KeyRelease>", self._on_editor_content_change)
         self.text_area.bind("<Key>", self._handle_auto_pair_keystrokes)
         self.text_area.bind("<Return>", self._handle_smart_auto_indentation)
+        self.text_area.bind("<Tab>", lambda e: self.snippet_engine.process_tab_event(e))
         
         self.text_area.bind("<MouseWheel>", self._synchronize_scroll_viewports)
         self.text_area.bind("<Button-4>", self._synchronize_scroll_viewports)
@@ -131,9 +134,10 @@ class EditorComponent(ctk.CTkFrame):
         self.line_numbers.configure(state="normal")
         self.line_numbers.delete("1.0", "end")
         
+        # FIXED CONFIG: Extracts index [0] to securely pass the row number to int()
         total_lines = int(self.text_area.index("end-1c").split(".")[0])
-        line_number_string = "\n".join(str(i) for i in range(1, total_lines + 1))
         
+        line_number_string = "\n".join(str(i) for i in range(1, total_lines + 1))
         self.line_numbers.insert("1.0", line_number_string)
         self.line_numbers.configure(state="disabled")
         self._align_line_scrollbar_indices()
@@ -174,7 +178,7 @@ class EditorComponent(ctk.CTkFrame):
         return "break"
 
     def _on_editor_content_change(self, event):
-        if event.keysym not in ("Left", "Right", "Up", "Down", "Control_L", "Control_R", "Shift_L", "Shift_R", "Return"):
+        if event.keysym not in ("Left", "Right", "Up", "Down", "Control_L", "Control_R", "Shift_L", "Shift_R", "Return", "Tab"):
             self.update_line_count()
             self.highlighter.highlight(self.editor_elements_visible)
             if self.is_find_panel_visible:
