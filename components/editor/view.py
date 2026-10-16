@@ -1,7 +1,7 @@
 """
 SublimeLight - Core Editor Component View
 Provides a smooth, high-performance programming canvas equipped with real-time 
-line numbering, Monokai syntax highlighting, tab strip tracking, and instant font size scaling.
+line numbering, Monokai syntax highlighting, smart auto-brackets matching, and font size scaling.
 """
 
 import tkinter as tk
@@ -57,7 +57,9 @@ class EditorComponent(ctk.CTkFrame):
 
         # 3. REAL-TIME SIGNAL KEY BINDINGS INTERCEPT NETWORKS
         self.text_area.bind("<KeyRelease>", self._on_editor_content_change)
-        self.text_area.bind("<Key>", self._restrict_system_keystrokes)
+        
+        # FIXED: Hook up the smart keyboard auto-brackets intercept handler natively
+        self.text_area.bind("<Key>", self._handle_auto_pair_keystrokes)
         
         # Safe Asynchronous Scroll Sync Binding Hooks
         self.text_area.bind("<MouseWheel>", self._synchronize_scroll_viewports)
@@ -69,6 +71,35 @@ class EditorComponent(ctk.CTkFrame):
         self.text_area.bind("<Control-KeyPress-plus>", lambda event: self._adjust_editor_font_scale(1))    # Numpad Plus
         self.text_area.bind("<Control-KeyPress-minus>", lambda event: self._adjust_editor_font_scale(-1))  # Ctrl - Minus
 
+    def _handle_auto_pair_keystrokes(self, event):
+        """Intercepts open bracket and quote entries, auto-injecting closing pairs smoothly."""
+        pairs = {
+            "(": ")",
+            "[": "]",
+            "{": "}",
+            '"': '"',
+            "'": "'"
+        }
+        
+        char = event.char
+        if char in pairs:
+            # 1. Insert both opening character and closing pair right at the typing cursor position
+            self.text_area.insert("insert", char + pairs[char])
+            
+            # 2. Shift typing insertion caret back 1 space to rest right between the symbols
+            self.text_area.mark_set("insert", "insert-1c")
+            
+            # Sync rendering layers and save changes to active document buffer cache
+            self.update_line_count()
+            self.highlight_full_document()
+            if self.context:
+                self.context.save_current_buffer_to_cache()
+                
+            # Intercept event execution track to block Tkinter from printing duplicate keys
+            return "break"
+            
+        return None
+
     def _adjust_editor_font_scale(self, change_delta):
         """Resizes text fields and updates styles across all tokens dynamically."""
         new_size = self.current_font_size + change_delta
@@ -78,7 +109,7 @@ class EditorComponent(ctk.CTkFrame):
             if hasattr(self, 'line_numbers') and self.line_numbers:
                 self.line_numbers.configure(font=("Consolas", self.current_font_size))
             self.update_line_count()
-            self.highlight_full_document()  # Re-render syntax metrics at the new font size
+            self.highlight_full_document()
         return "break"
 
     def get_text(self):
@@ -101,6 +132,7 @@ class EditorComponent(ctk.CTkFrame):
         self.line_numbers.configure(state="normal")
         self.line_numbers.delete("1.0", "end")
         total_lines = int(self.text_area.index("end-1c").split(".")[0])
+
         line_number_string = "\n".join(str(i) for i in range(1, total_lines + 1))
         self.line_numbers.insert("1.0", line_number_string)
         self.line_numbers.configure(state="disabled")
@@ -120,31 +152,26 @@ class EditorComponent(ctk.CTkFrame):
         if not self.editor_elements_visible:
             return
 
-        # Clear existing color tags to re-parse cleanly
         for tag in ["keyword", "builtin", "string", "comment", "number"]:
             self.text_area.tag_remove(tag, "1.0", "end")
 
         code_text = self.get_text()
 
-        # Define Python code matching tokens rules matrices
         keywords = r'\b(def|class|return|while|for|in|if|elif|else|break|continue|import|from|as|global|assert|pass|try|except|finally|print)\b'
         builtins = r'\b(str|int|float|list|dict|set|tuple|len|range|enumerate|print|input|open|append|strip|split)\b'
         strings = r'(\".*?\"|\'.*?\')'
         comments = r'(#.*)'
         numbers = r'\b(\d+)\b'
 
-        # Helper extraction scanner loop
         def apply_regex_tags(pattern, tag_name):
             for match in re.finditer(pattern, code_text):
                 start_offset = match.start()
                 end_offset = match.end()
                 
-                # Convert raw index offsets into Tkinter row.col coordinate points strings
                 start_idx = self.text_area.index(f"1.0 + {start_offset} chars")
                 end_idx = self.text_area.index(f"1.0 + {end_offset} chars")
                 self.text_area.tag_add(tag_name, start_idx, end_idx)
 
-        # Cascade tagging layers (Strings and comments override keywords)
         apply_regex_tags(numbers, "number")
         apply_regex_tags(keywords, "keyword")
         apply_regex_tags(builtins, "builtin")
@@ -154,12 +181,9 @@ class EditorComponent(ctk.CTkFrame):
     def _on_editor_content_change(self, event):
         if event.keysym not in ("Left", "Right", "Up", "Down", "Control_L", "Control_R", "Shift_L", "Shift_R"):
             self.update_line_count()
-            self.highlight_full_document()  # Update syntax highlighting dynamically as you type
+            self.highlight_full_document()
             if self.context:
                 self.context.save_current_buffer_to_cache()
-
-    def _restrict_system_keystrokes(self, event):
-        return None
 
     def _synchronize_scroll_viewports(self, event):
         self.after(1, self._align_line_scrollbar_indices)
