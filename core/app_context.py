@@ -1,4 +1,7 @@
-"""Central application state broker routing multiple tab operations cleanly without interfering with terminals."""
+"""
+SublimeLight - Core Application Domain Context
+Central application state broker routing multiple tab operations cleanly.
+"""
 
 import os
 
@@ -12,7 +15,6 @@ class AppContext:
         self.sidebar = None
         self.editor = None
         self.statusbar = None
-        self.terminal = None  
 
     def open_new_tab(self, file_path, content_text):
         """Registers a newly opened file inside our tab dictionary or focuses it if already open."""
@@ -36,7 +38,7 @@ class AppContext:
             self.open_tabs[self.current_file] = self.editor.get_text()
 
     def set_active_file(self, file_path):
-        """State machine modifier updating workspace tracking logs safely without moving the terminal."""
+        """State machine modifier updating workspace tracking logs safely."""
         if not file_path:
             self.current_file = None
             if self.editor:
@@ -47,9 +49,6 @@ class AppContext:
             self.current_file = "untitled"
         else:
             self.current_file = os.path.normpath(os.path.abspath(file_path))
-            
-            # FIXED: Automatic terminal synchronization code block is completely deleted.
-            # Shifting focus across different tabs or sidebar clicks will never alter the shell path.
         
         text_content = self.open_tabs.get(self.current_file, "")
 

@@ -3,7 +3,7 @@ SublimeLight - Core Entry Point
 
 This file serves as the Application Bootstrapper / Composition Root. 
 It instantiates the central state orchestration context, initializes the 
-independent frontend components, and maps flicker-free toggleable integrated console layers.
+independent frontend components, and maps your stable single-pane text editor layout.
 """
 
 import time
@@ -14,7 +14,6 @@ from core.app_context import AppContext
 from components.sidebar.view import SidebarComponent
 from components.editor.view import EditorComponent
 from components.statusbar.view import StatusbarComponent
-from components.terminal.view import TerminalComponent
 
 class SublimeLightApp(ctk.CTk):
     def __init__(self):
@@ -27,11 +26,6 @@ class SublimeLightApp(ctk.CTk):
 
         # 2. Boot Central Orchestrator Domain Context Engine
         self.context = AppContext(self)
-        self.terminal_visible = False 
-        
-        # FIXED FLICKER PROTECTION: State tracking attributes for the cool-down timer
-        self.last_terminal_toggle_time = 0
-        self.toggle_cooldown_duration = 0.3  # 300 millisecond lockout filter window
 
         # 3. Native Top Window Menu Strip Assembly
         self._create_top_menu_bar()
@@ -47,11 +41,10 @@ class SublimeLightApp(ctk.CTk):
         self.right_content_pane = ctk.CTkFrame(self.workspace_layout, fg_color="transparent", corner_radius=0)
         self.right_content_pane.pack(side="right", fill="both", expand=True)
 
+        # RESTORED STABLE SINGLE-PANE VIEW: Put EditorComponent directly back into the layout
         self.editor = EditorComponent(self.right_content_pane, self.context)
         self.editor.pack(side="top", fill="both", expand=True)
-
-        self.terminal = TerminalComponent(self.right_content_pane, self.context)
-        self.context.terminal = self.terminal
+        self.context.editor = self.editor
 
         self.statusbar = StatusbarComponent(self, self.context)
         self.statusbar.pack(side="bottom", fill="x")
@@ -61,28 +54,6 @@ class SublimeLightApp(ctk.CTk):
         self.bind("<Control-o>", lambda event: self._dispatch_open_file())
         self.bind("<Control-s>", lambda event: self._dispatch_save_file())
         self.bind("<Control-d>", lambda event: self._dispatch_open_folder())
-        
-        # Binds directly to holding down Control and Shift together
-        self.bind("<Control-Shift-KeyPress>", lambda event: self._toggle_integrated_terminal())
-
-    def _toggle_integrated_terminal(self):
-        """Dynamically displays or drops the console panel with built-in flicker protection filters."""
-        current_time = time.time()
-        
-        # DEBOUNCE FILTER: If the time since the last click is less than 300ms, ignore the burst event
-        if current_time - self.last_terminal_toggle_time < self.toggle_cooldown_duration:
-            return
-            
-        # Log the timestamp of the valid execution pass
-        self.last_terminal_toggle_time = current_time
-
-        if self.terminal_visible:
-            self.terminal.pack_forget()
-            self.terminal_visible = False
-        else:
-            self.terminal.pack(side="bottom", fill="x", pady=(5, 0))
-            self.terminal_visible = True
-            self.terminal.text_area.focus_set()
 
     def _create_top_menu_bar(self):
         menu_bar = tk.Menu(self)

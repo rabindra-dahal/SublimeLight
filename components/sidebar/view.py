@@ -14,7 +14,6 @@ from .theme_style import SidebarThemeStyle
 from .tree_manager import SidebarTreeManager
 from .tree_events import SidebarTreeEvents
 
-# FIXED CLASS NAME: Must exactly match 'SidebarComponent' to satisfy the main.py import pass!
 class SidebarComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
         super().__init__(parent, width=200, fg_color=config.COLOR_SIDEBAR, corner_radius=0)
@@ -44,7 +43,7 @@ class SidebarComponent(ctk.CTkFrame):
         )
         self.standalone_file_path = None 
 
-        # --- INITIALIZE REFRACTORED CONTAINER NETWORKS ---
+        # --- CONTAINER NETWORKS ---
         self.tree_container = tk.Frame(self, bg=config.COLOR_SIDEBAR)
         self.tree_container.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -83,9 +82,6 @@ class SidebarComponent(ctk.CTkFrame):
         self.current_workspace_folder = os.path.normpath(os.path.abspath(folder_path))
         folder_name = os.path.basename(self.current_workspace_folder).upper()
         self.workspace_title_lbl.configure(text=folder_name, text_color="#5c6370")
-        
-        if self.context and self.context.terminal:
-            self.context.terminal.sync_workspace_directory(self.current_workspace_folder)
         
         self.refresh_workspace_tree()
 

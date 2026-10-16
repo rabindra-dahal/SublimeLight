@@ -1,11 +1,11 @@
 """
 SublimeLight - Runner Infrastructure Service
-Handles secure, decoupled background execution routines inside native OS terminals.
+Handles secure, decoupled script execution routines inside external interactive console windows.
 """
 
 import os
 import subprocess
-import time
+import threading
 
 class RunnerService:
     @staticmethod
@@ -30,7 +30,7 @@ class RunnerService:
                     bat_file.write(f'python "{script_name}"\n')
                     bat_file.write(f'echo.\n')
                     bat_file.write(f'echo -----------------------------------------\n')
-                    bat_file.write(f'echo [Process finished. Press any key to close this terminal...]\n')
+                    bat_file.write(f'echo [Process finished. Press any key to close this window...]\n')
                     bat_file.write(f'pause > nul\n')
                 
                 # Launch the batch script in a real new console window
@@ -39,8 +39,7 @@ class RunnerService:
                     creationflags=subprocess.CREATE_NEW_CONSOLE
                 )
                 
-                # Wait for the user to close or finish the script in the background thread,
-                # then quietly delete the temporary file so it doesn't clutter their folder.
+                # Wait for the script to finish, then quietly delete the temporary file
                 def cleanup():
                     process.wait()
                     try:
@@ -48,7 +47,6 @@ class RunnerService:
                     except:
                         pass
                 
-                import threading
                 threading.Thread(target=cleanup, daemon=True).start()
 
             else:  # Linux / Unix Platform Fallbacks
@@ -56,4 +54,4 @@ class RunnerService:
                 
         except Exception as e:
             from tkinter import messagebox
-            messagebox.showerror("Execution Error", f"Failed initializing background script execution: {e}")
+            messagebox.showerror("Execution Error", f"Failed initializing script execution: {e}")
