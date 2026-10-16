@@ -1,155 +1,172 @@
 """
-SublimeLight - Editor Component View
-Central master framework parsing input actions and orchestrating dynamic tab displays
-safely leveraging CustomTkinter's native scroll mechanics without routing locks.
+SublimeLight - Core Editor Component View
+Provides a smooth, high-performance programming canvas equipped with real-time 
+line numbering, Monokai syntax highlighting, tab strip tracking, and instant font size scaling.
 """
 
-import re
+import tkinter as tk
 import customtkinter as ctk
+import re
+import os
 import config
-from .line_numbers import LineNumbersComponent
 from .tab_bar import TabBarComponent
 
 class EditorComponent(ctk.CTkFrame):
     def __init__(self, parent, context):
-        super().__init__(parent, fg_color="transparent", corner_radius=0)
+        super().__init__(parent, fg_color=config.COLOR_BG, corner_radius=0)
         self.context = context
-        self.context.editor = self 
-        self.editor_elements_visible = False
-        self.is_switching_tabs = False
+        self.context.editor = self
+        self.pack_propagate(False)
 
-        # 1. Mount Top Closeable Multi-Tab Row Strip Bar
+        self.is_switching_tabs = False
+        self.editor_elements_visible = True
+
+        # --- FONT SIZE SCALING VARIABLES ---
+        self.current_font_size = 12  # Standard crisp coding default font size Baseline
+
+        # 1. Top Tab Strip Bar Controller
         self.tab_bar = TabBarComponent(self, self.context)
         self.tab_bar.pack(side="top", fill="x")
 
-        # 2. Main Content Container Area
-        self.content_area = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
-        self.content_area.pack(side="bottom", fill="both", expand=True)
+        # 2. Main Editing Layout Workspace Grid Frame
+        self.edit_frame = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        self.edit_frame.pack(side="bottom", fill="both", expand=True)
 
-        self.line_numbers = LineNumbersComponent(self.content_area)
-
-        # 3. Code Text Editor Area Box
-        # FIXED: Native activate_scrollbars=True handles rendering out of the box cleanly
-        self.text_area = ctk.CTkTextbox(
-            self.content_area, font=config.FONT_EDITOR, fg_color=config.COLOR_BG,
-            text_color=config.COLOR_TEXT, corner_radius=0, border_width=0, activate_scrollbars=True
+        # Left Axis: Line Numbers Sidebar Display
+        self.line_numbers = tk.Text(
+            self.edit_frame, width=4, padx=5, bd=0, 
+            bg=config.COLOR_SIDEBAR, fg="#75715E", state="disabled",
+            font=("Consolas", self.current_font_size), wrap="none"
         )
-        self.text_area._textbox.configure(insertbackground=config.COLOR_TEXT)
-        self._setup_syntax_tags()
-        
-        # Bind Event Synchronization Listeners
-        self.text_area.bind("<KeyRelease>", self._on_editor_action)
-        self.text_area.bind("<ButtonRelease>", self._on_editor_action)
-        self.text_area.bind("<Key>", self._on_intercept_keypress) 
-        self.text_area.bind("<F5>", self._trigger_code_execution)
-        
-        self.show_editor_elements(False)
+        self.line_numbers.pack(side="left", fill="y")
 
-    def show_editor_elements(self, visible=True):
-        self.editor_elements_visible = visible
-        if visible:
-            self.line_numbers.pack(side="left", fill="y", padx=(0, 2))
-            self.text_area.pack(side="right", fill="both", expand=True)
+        # Right Axis: Main Interactive Code Typing Surface
+        self.text_area = tk.Text(
+            self.edit_frame, bg=config.COLOR_BG, fg=config.COLOR_TEXT,
+            insertbackground="white", font=("Consolas", self.current_font_size),
+            bd=0, padx=10, pady=5, wrap="none", undo=True
+        )
+        self.text_area.pack(side="right", fill="both", expand=True)
+
+        # --- MONOKAI SYNTAX CONFIGURATION TAGS ---
+        self.text_area.tag_config("keyword", foreground="#F92672")  # Pink
+        self.text_area.tag_config("builtin", foreground="#66D9EF")  # Cyan
+        self.text_area.tag_config("string", foreground="#E6DB74")   # Yellow
+        self.text_area.tag_config("comment", foreground="#75715E")  # Grey
+        self.text_area.tag_config("number", foreground="#AE81FF")   # Purple
+
+        # 3. REAL-TIME SIGNAL KEY BINDINGS INTERCEPT NETWORKS
+        self.text_area.bind("<KeyRelease>", self._on_editor_content_change)
+        self.text_area.bind("<Key>", self._restrict_system_keystrokes)
+        
+        # Safe Asynchronous Scroll Sync Binding Hooks
+        self.text_area.bind("<MouseWheel>", self._synchronize_scroll_viewports)
+        self.text_area.bind("<Button-4>", self._synchronize_scroll_viewports)
+        self.text_area.bind("<Button-5>", self._synchronize_scroll_viewports)
+
+        # --- ACCESSIBILITY ZOOM SHORTCUT INTERCEPTS ---
+        self.text_area.bind("<Control-KeyPress-equal>", lambda event: self._adjust_editor_font_scale(1))   # Ctrl + Plus
+        self.text_area.bind("<Control-KeyPress-plus>", lambda event: self._adjust_editor_font_scale(1))    # Numpad Plus
+        self.text_area.bind("<Control-KeyPress-minus>", lambda event: self._adjust_editor_font_scale(-1))  # Ctrl - Minus
+
+    def _adjust_editor_font_scale(self, change_delta):
+        """Resizes text fields and updates styles across all tokens dynamically."""
+        new_size = self.current_font_size + change_delta
+        if 8 <= new_size <= 32:
+            self.current_font_size = new_size
+            self.text_area.configure(font=("Consolas", self.current_font_size))
+            if hasattr(self, 'line_numbers') and self.line_numbers:
+                self.line_numbers.configure(font=("Consolas", self.current_font_size))
             self.update_line_count()
+            self.highlight_full_document()  # Re-render syntax metrics at the new font size
+        return "break"
+
+    def get_text(self):
+        return self.text_area.get("1.0", "end-1c")
+
+    def render_tab_switch_state(self, file_path, text_content):
+        self.is_switching_tabs = True
+        self.show_editor_elements(True)
+        self.text_area.delete("1.0", "end")
+        self.text_area.insert("1.0", text_content)
+        self.highlight_full_document()
+        self.update_line_count()
+        self.is_switching_tabs = False
+        if hasattr(self.tab_bar, 'rebuild_tab_strip_layout'):
+            self.tab_bar.rebuild_tab_strip_layout()
+
+    def update_line_count(self, event=None):
+        if self.is_switching_tabs or not self.editor_elements_visible:
+            return
+        self.line_numbers.configure(state="normal")
+        self.line_numbers.delete("1.0", "end")
+        total_lines = int(self.text_area.index("end-1c").split(".")[0])
+        line_number_string = "\n".join(str(i) for i in range(1, total_lines + 1))
+        self.line_numbers.insert("1.0", line_number_string)
+        self.line_numbers.configure(state="disabled")
+        self._align_line_scrollbar_indices()
+
+    def show_editor_elements(self, visible_flag):
+        self.editor_elements_visible = visible_flag
+        if visible_flag:
+            self.line_numbers.pack(side="left", fill="y")
+            self.text_area.pack(side="right", fill="both", expand=True)
         else:
             self.line_numbers.pack_forget()
             self.text_area.pack_forget()
 
-    def render_tab_switch_state(self, active_path, text_content):
-        """Fires from context layer to update active workspace tab configurations securely."""
-        if active_path:
-            self.is_switching_tabs = True
-            self.show_editor_elements(True)
-            self.text_area.delete("1.0", "end")
-            self.text_area.insert("1.0", text_content)
-            self.highlight_full_document()
-            self.update_line_count()
-            self.is_switching_tabs = False
-        else:
-            self.show_editor_elements(False)
-            
-        self.tab_bar.rebuild_tab_strip_layout()
-
-    def set_text(self, text, file_path=None):
-        target_path = file_path if file_path else "untitled"
-        if self.context:
-            self.context.open_new_tab(target_path, text)
-
-    def get_text(self):
-        return self.text_area.get("1.0", "end-1c") if self.editor_elements_visible else ""
-
-    def _setup_syntax_tags(self):
-        tk_text = self.text_area._textbox
-        tk_text.tag_configure("KEYWORD", foreground=config.COLOR_KEYWORD)
-        tk_text.tag_configure("STRING", foreground=config.COLOR_STRING)
-        tk_text.tag_configure("COMMENT", foreground=config.COLOR_COMMENT)
-        tk_text.tag_configure("NUMBER", foreground=config.COLOR_NUMBER)
-
-    def highlight_line(self, line_num):
-        if not self.editor_elements_visible:
-            return
-        tk_text = self.text_area._textbox
-        start_idx, end_idx = f"{line_num}.0", f"{line_num}.end"
-        for tag in ["KEYWORD", "STRING", "COMMENT", "NUMBER"]:
-            tk_text.tag_remove(tag, start_idx, end_idx)
-            
-        line_text = tk_text.get(start_idx, end_idx)
-        for match in re.finditer(r"#.*$", line_text):
-            tk_text.tag_add("COMMENT", f"{line_num}.{match.start()}", f"{line_num}.{match.end()}")
-            line_text = line_text[:match.start()] + (" " * (match.end() - match.start()))
-
-        string_pattern = r'("(?:[^"\\]|\\.)*")|(\'/d/ML/github-mine/SublimeLight\'(?:[^\'\\]|\\.)*\')'
-        for match in re.finditer(string_pattern, line_text):
-            tk_text.tag_add("STRING", f"{line_num}.{match.start()}", f"{line_num}.{match.end()}")
-            line_text = line_text[:match.start()] + (" " * (match.end() - match.start()))
-
-        for match in re.finditer(r"\b[a-zA-Z_]\w*\b|\b\d+\b", line_text):
-            token = match.group()
-            token_start, token_end = f"{line_num}.{match.start()}", f"{line_num}.{match.end()}"
-            if token in config.PYTHON_KEYWORDS:
-                tk_text.tag_add("KEYWORD", token_start, token_end)
-            elif token in config.PYTHON_NUMBERS or token.isdigit():
-                tk_text.tag_add("NUMBER", token_start, token_end)
-
     def highlight_full_document(self):
+        """Performs full regex-based Monokai token highlighting across the active document."""
         if not self.editor_elements_visible:
             return
-        end_idx = self.text_area.index("end-1c")
-        total_lines = int(end_idx.split(".")[0])  
-        for line in range(1, total_lines + 1):
-            self.highlight_line(line)
 
-    def update_line_count(self):
-        if not self.editor_elements_visible:
-            return
-        end_index = self.text_area.index("end-1c")
-        total_lines = int(end_index.split(".")[0])  
-        self.line_numbers.redraw(total_lines)
+        # Clear existing color tags to re-parse cleanly
+        for tag in ["keyword", "builtin", "string", "comment", "number"]:
+            self.text_area.tag_remove(tag, "1.0", "end")
 
-    def _on_intercept_keypress(self, event=None):
-        if not self.editor_elements_visible or self.is_switching_tabs:
-            return
-        current_line = int(self.text_area.index("insert").split(".")[0])  
-        self.after(1, lambda: self.highlight_line(current_line))
+        code_text = self.get_text()
 
-    def _trigger_code_execution(self, event=None):
-        if not self.editor_elements_visible:
-            return "break"
-        if self.context.sidebar:
-            self.context.sidebar._trigger_save()
-        if self.context.current_file and self.context.current_file != "untitled":
-            import threading
-            from services.runner_service import RunnerService
-            threading.Thread(target=RunnerService.execute_script, args=(self.context.current_file,), daemon=True).start()
-        return "break" 
+        # Define Python code matching tokens rules matrices
+        keywords = r'\b(def|class|return|while|for|in|if|elif|else|break|continue|import|from|as|global|assert|pass|try|except|finally|print)\b'
+        builtins = r'\b(str|int|float|list|dict|set|tuple|len|range|enumerate|print|input|open|append|strip|split)\b'
+        strings = r'(\".*?\"|\'.*?\')'
+        comments = r'(#.*)'
+        numbers = r'\b(\d+)\b'
 
-    def _on_editor_action(self, event=None):
-        if not self.editor_elements_visible or self.is_switching_tabs:
-            return
-            
-        if self.context and self.context.current_file:
-            self.context.open_tabs[self.context.current_file] = self.get_text()
-        self.update_line_count()
-        if self.context.statusbar:
-            row, col = self.text_area.index("insert").split(".")
-            self.context.statusbar.update_coordinates(row, col)
+        # Helper extraction scanner loop
+        def apply_regex_tags(pattern, tag_name):
+            for match in re.finditer(pattern, code_text):
+                start_offset = match.start()
+                end_offset = match.end()
+                
+                # Convert raw index offsets into Tkinter row.col coordinate points strings
+                start_idx = self.text_area.index(f"1.0 + {start_offset} chars")
+                end_idx = self.text_area.index(f"1.0 + {end_offset} chars")
+                self.text_area.tag_add(tag_name, start_idx, end_idx)
+
+        # Cascade tagging layers (Strings and comments override keywords)
+        apply_regex_tags(numbers, "number")
+        apply_regex_tags(keywords, "keyword")
+        apply_regex_tags(builtins, "builtin")
+        apply_regex_tags(strings, "string")
+        apply_regex_tags(comments, "comment")
+
+    def _on_editor_content_change(self, event):
+        if event.keysym not in ("Left", "Right", "Up", "Down", "Control_L", "Control_R", "Shift_L", "Shift_R"):
+            self.update_line_count()
+            self.highlight_full_document()  # Update syntax highlighting dynamically as you type
+            if self.context:
+                self.context.save_current_buffer_to_cache()
+
+    def _restrict_system_keystrokes(self, event):
+        return None
+
+    def _synchronize_scroll_viewports(self, event):
+        self.after(1, self._align_line_scrollbar_indices)
+
+    def _align_line_scrollbar_indices(self):
+        try:
+            top_fraction, _ = self.text_area.yview()
+            self.line_numbers.yview_moveto(top_fraction)
+        except:
+            pass

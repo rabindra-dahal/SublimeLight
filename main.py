@@ -60,7 +60,8 @@ class SublimeLightApp(ctk.CTk):
         self.bind("<Control-o>", lambda event: self._dispatch_open_file())
         self.bind("<Control-s>", lambda event: self._dispatch_save_file())
         self.bind("<Control-d>", lambda event: self._dispatch_open_folder())
-        
+
+        self.bind("<KeyPress-F5>", lambda event: self._dispatch_execute_script())
         # Hotkey: Maps Control + F5 to instantly open a standalone native command prompt window
         self.bind("<Control-F5>", lambda event: self._dispatch_launch_native_cmd())
 
