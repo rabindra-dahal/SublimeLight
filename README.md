@@ -107,5 +107,5 @@ Feel free to explore the repository modules, submit issue pull requests, or reac
 
 - **Engineer:** Rabindra Dahal
 - **Email:** rabi.vookus@gmail.com
-- **LinkedIn:** [://linkedin.com](www.linkedin.com/in/rabindra-dahal)
-- **GitHub Portfolio:** [://github.com](https://github.com/rabindra-dahal)
+- **LinkedIn:** [www.linkedin.com/in/rabindra-dahal](www.linkedin.com/in/rabindra-dahal)
+- **GitHub Portfolio:** [https://github.com/rabindra-dahal](https://github.com/rabindra-dahal)
