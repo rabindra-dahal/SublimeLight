@@ -78,7 +78,7 @@ pip install customtkinter
 # Clean pycache modules safely across your terminal environment tracks
 find . -name "*.pyc" -delete && find . -name "__pycache__" -type d -exec rm -rf {} +
 
-# Launch the centered desktop editor application
+# Launch the centered desktop editor application agter pycache residual are removed
 python main.py
 ```
 
